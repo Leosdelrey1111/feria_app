@@ -9,6 +9,8 @@ class AuthState {
   final String? email;
   final int reminderMinutes;
   final bool wearConnected;
+  // Último error de autenticación, para que el login_screen lo muestre.
+  final String? lastError;
 
   AuthState({
     this.isLoading = false,
@@ -18,6 +20,7 @@ class AuthState {
     this.email,
     this.reminderMinutes = 10,
     this.wearConnected = true,
+    this.lastError,
   });
 
   AuthState copyWith({
@@ -28,6 +31,7 @@ class AuthState {
     String? email,
     int? reminderMinutes,
     bool? wearConnected,
+    String? lastError,
   }) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
@@ -37,6 +41,7 @@ class AuthState {
       email: email ?? this.email,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       wearConnected: wearConnected ?? this.wearConnected,
+      lastError: lastError,
     );
   }
 }
@@ -72,73 +77,67 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // Iniciar sesión normal
+  // Iniciar sesión normal (valida contra el hash guardado localmente)
   Future<bool> login(String email, String password) async {
-    state = state.copyWith(isLoading: true);
-    try {
-      final success = await _authService.login(email, password);
-      if (success) {
-        final name = await _authService.getUserName();
-        final userEmail = await _authService.getUserEmail();
-        state = AuthState(
-          isLoggedIn: true,
-          isVisitor: false,
-          name: name,
-          email: userEmail,
-          reminderMinutes: 10,
-          wearConnected: true,
-          isLoading: false,
-        );
-        return true;
-      }
-    } catch (_) {}
-    state = state.copyWith(isLoading: false);
+    state = state.copyWith(isLoading: true, lastError: null);
+    final result = await _authService.login(email, password);
+    if (result.success) {
+      final name = await _authService.getUserName();
+      final userEmail = await _authService.getUserEmail();
+      state = AuthState(
+        isLoggedIn: true,
+        isVisitor: false,
+        name: name,
+        email: userEmail,
+        reminderMinutes: 10,
+        wearConnected: true,
+        isLoading: false,
+      );
+      return true;
+    }
+    state = state.copyWith(isLoading: false, lastError: result.errorMessage);
     return false;
   }
 
-  // Registrar cuenta
+  // Registrar cuenta (falla si el correo ya existe)
   Future<bool> register(String name, String email, String password) async {
-    state = state.copyWith(isLoading: true);
-    try {
-      final success = await _authService.register(name, email, password);
-      if (success) {
-        state = AuthState(
-          isLoggedIn: true,
-          isVisitor: false,
-          name: name,
-          email: email,
-          reminderMinutes: 10,
-          wearConnected: true,
-          isLoading: false,
-        );
-        return true;
-      }
-    } catch (_) {}
-    state = state.copyWith(isLoading: false);
+    state = state.copyWith(isLoading: true, lastError: null);
+    final result = await _authService.register(name, email, password);
+    if (result.success) {
+      state = AuthState(
+        isLoggedIn: true,
+        isVisitor: false,
+        name: name,
+        email: email,
+        reminderMinutes: 10,
+        wearConnected: true,
+        isLoading: false,
+      );
+      return true;
+    }
+    state = state.copyWith(isLoading: false, lastError: result.errorMessage);
     return false;
   }
 
-  // Google Login
-  Future<bool> loginWithGoogle() async {
-    state = state.copyWith(isLoading: true);
-    try {
-      final success = await _authService.loginWithGoogle();
-      if (success) {
-        final name = await _authService.getUserName();
-        final email = await _authService.getUserEmail();
-        state = AuthState(
-          isLoggedIn: true,
-          isVisitor: false,
-          name: name,
-          email: email,
-          reminderMinutes: 10,
-          wearConnected: true,
-          isLoading: false,
-        );
-        return true;
-      }
-    } catch (_) {}
-    state = state.copyWith(isLoading: false);
+  // Login con Google (simulado localmente, con nombre proporcionado por el usuario)
+  Future<bool> loginWithGoogle(String displayName) async {
+    state = state.copyWith(isLoading: true, lastError: null);
+    final result = await _authService.loginWithGoogle(displayName);
+    if (result.success) {
+      final name = await _authService.getUserName();
+      final email = await _authService.getUserEmail();
+      state = AuthState(
+        isLoggedIn: true,
+        isVisitor: false,
+        name: name,
+        email: email,
+        reminderMinutes: 10,
+        wearConnected: true,
+        isLoading: false,
+      );
+      return true;
+    }
+    state = state.copyWith(isLoading: false, lastError: result.errorMessage);
     return false;
   }
 
@@ -157,6 +156,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       wearConnected: false,
       isLoading: false,
     );
+  }
+
+  // Limpiar el error mostrado (por ejemplo, al cambiar entre login/registro)
+  void clearError() {
+    if (state.lastError != null) {
+      state = state.copyWith(lastError: null);
+    }
   }
 
   // Cambiar configuración de minutos de recordatorio
