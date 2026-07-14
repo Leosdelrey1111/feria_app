@@ -7,6 +7,7 @@ import '../../models/ticket.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/ticket_provider.dart';
 import '../../theme/app_theme.dart';
+import 'qr_fullscreen_screen.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -134,7 +135,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                             ),
                           ),
                           SizedBox(
-                            height: 380,
+                            height: 410,
                             child: PageView.builder(
                               controller: _pageController,
                               itemCount: activeTickets.length,
@@ -302,30 +303,58 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               ),
             ),
 
-            // Contenido QR
+            // Contenido QR (tocar para verlo a pantalla completa)
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    QrImageView(
-                      data: ticket.qrCodeData,
-                      version: QrVersions.auto,
-                      size: 150.0,
-                      gapless: false,
-                      foregroundColor: theme.brightness == Brightness.dark ? Colors.white : Colors.black,
+              child: InkWell(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => QrFullscreenScreen(ticket: ticket),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Código: ${ticket.id}',
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        color: Colors.grey,
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      QrImageView(
+                        data: ticket.qrCodeData,
+                        version: QrVersions.auto,
+                        size: 130.0,
+                        gapless: false,
+                        foregroundColor: theme.brightness == Brightness.dark ? Colors.white : Colors.black,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        'Código: ${ticket.id}',
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.fullscreen, size: 14, color: theme.colorScheme.primary),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'Toca para ver en pantalla completa',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

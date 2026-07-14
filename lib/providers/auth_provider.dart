@@ -11,6 +11,8 @@ class AuthState {
   final String? email;
   final int reminderMinutes;
   final bool wearConnected;
+  // Último error de autenticación, para que el login_screen lo muestre.
+  final String? lastError;
 
   AuthState({
     this.isLoading = false,
@@ -20,6 +22,7 @@ class AuthState {
     this.email,
     this.reminderMinutes = 10,
     this.wearConnected = true,
+    this.lastError,
   });
 
   AuthState copyWith({
@@ -30,6 +33,7 @@ class AuthState {
     String? email,
     int? reminderMinutes,
     bool? wearConnected,
+    String? lastError,
   }) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
@@ -39,6 +43,7 @@ class AuthState {
       email: email ?? this.email,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       wearConnected: wearConnected ?? this.wearConnected,
+      lastError: lastError,
     );
   }
 }
@@ -90,12 +95,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _syncAuthStateToWatch();
   }
 
-  // Iniciar sesión normal
+  // Iniciar sesión normal (valida contra el hash guardado localmente)
   Future<bool> login(String email, String password) async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, lastError: null);
     try {
-      final success = await _authService.login(email, password);
-      if (success) {
+      final result = await _authService.login(email, password);
+      if (result.success) {
         final name = await _authService.getUserName();
         final userEmail = await _authService.getUserEmail();
         state = AuthState(
@@ -108,21 +113,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isLoading: false,
         );
         _syncAuthStateToWatch();
-        // Solicitar sincronización de los demás datos
         _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
+      } else {
+        state = state.copyWith(isLoading: false, lastError: result.errorMessage);
+        return false;
       }
-    } catch (_) {}
-    state = state.copyWith(isLoading: false);
-    return false;
+    } catch (_) {
+      state = state.copyWith(isLoading: false, lastError: 'Error al iniciar sesión.');
+      return false;
+    }
   }
 
-  // Registrar cuenta
+  // Registrar cuenta (falla si el correo ya existe)
   Future<bool> register(String name, String email, String password) async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, lastError: null);
     try {
-      final success = await _authService.register(name, email, password);
-      if (success) {
+      final result = await _authService.register(name, email, password);
+      if (result.success) {
         state = AuthState(
           isLoggedIn: true,
           isVisitor: false,
@@ -135,18 +143,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _syncAuthStateToWatch();
         _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
+      } else {
+        state = state.copyWith(isLoading: false, lastError: result.errorMessage);
+        return false;
       }
-    } catch (_) {}
-    state = state.copyWith(isLoading: false);
-    return false;
+    } catch (_) {
+      state = state.copyWith(isLoading: false, lastError: 'Error al registrar la cuenta.');
+      return false;
+    }
   }
 
   // Google Login
-  Future<bool> loginWithGoogle() async {
-    state = state.copyWith(isLoading: true);
+  Future<bool> loginWithGoogle(String displayName) async {
+    state = state.copyWith(isLoading: true, lastError: null);
     try {
-      final success = await _authService.loginWithGoogle();
-      if (success) {
+      final result = await _authService.loginWithGoogle(displayName);
+      if (result.success) {
         final name = await _authService.getUserName();
         final email = await _authService.getUserEmail();
         state = AuthState(
@@ -161,10 +173,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         _syncAuthStateToWatch();
         _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
+      } else {
+        state = state.copyWith(isLoading: false, lastError: result.errorMessage);
+        return false;
       }
-    } catch (_) {}
-    state = state.copyWith(isLoading: false);
-    return false;
+    } catch (_) {
+      state = state.copyWith(isLoading: false, lastError: 'Error al iniciar sesión con Google.');
+      return false;
+    }
   }
 
   // Explorar como visitante
@@ -179,10 +195,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
       name: name,
       email: email,
       reminderMinutes: 10,
-      wearConnected: false,
+      wearConnected: true,
       isLoading: false,
     );
     _syncAuthStateToWatch();
+  }
+
+  // Limpiar el error mostrado (por ejemplo, al cambiar entre login/registro)
+  void clearError() {
+    if (state.lastError != null) {
+      state = state.copyWith(lastError: null);
+    }
   }
 
   // Cambiar configuración de minutos de recordatorio

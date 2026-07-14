@@ -14,15 +14,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _nameController = TextEditingController();
 
   bool _isSignUp = false; // Alternar entre Login y Registro
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _nameController.dispose();
     super.dispose();
   }
@@ -50,9 +53,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (success) {
         _showLoginSuccessAndNavigate();
       } else {
+        final error = ref.read(authProvider).lastError ??
+            'Credenciales incorrectas o error en el servidor.';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Credenciales incorrectas o error en el servidor.'),
+          SnackBar(
+            content: Text(error),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -60,10 +65,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  // Como la app no tiene backend real, no existe un OAuth verdadero de
+  // Google. En vez de iniciar sesión SIEMPRE con la misma cuenta ficticia
+  // ("google.user@gmail.com"), se le pide al usuario el nombre de la
+  // cuenta que quiere simular, y con eso se crea/recupera su cuenta local.
   void _googleLogin() async {
-    final success = await ref.read(authProvider.notifier).loginWithGoogle();
+    final nameController = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Selecciona tu cuenta'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Esta app aún no tiene un backend real, así que el acceso con '
+              'Google se simula localmente. Escribe tu nombre para continuar '
+              'con una cuenta identificable en vez de datos genéricos.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Nombre completo',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, nameController.text.trim()),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+
+    if (name == null || name.isEmpty) return;
+
+    final success = await ref.read(authProvider.notifier).loginWithGoogle(name);
     if (mounted && success) {
       _showLoginSuccessAndNavigate();
+    } else if (mounted) {
+      final error = ref.read(authProvider).lastError ?? 'No se pudo iniciar sesión con Google.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.redAccent),
+      );
     }
   }
 
@@ -188,7 +244,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         ),
                                       ),
                                       validator: (value) {
-                                        if (value == null || value.isEmpty) {
+                                        if (value == null || value.trim().isEmpty) {
                                           return 'Ingresa tu nombre';
                                         }
                                         return null;
@@ -210,7 +266,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       if (value == null || value.isEmpty) {
                                         return 'Ingresa tu correo';
                                       }
-                                      if (!value.contains('@')) {
+                                      if (!value.contains('@') || !value.contains('.')) {
                                         return 'Ingresa un correo válido';
                                       }
                                       return null;
@@ -247,6 +303,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                       return null;
                                     },
                                   ),
+                                  if (_isSignUp) ...[
+                                    const SizedBox(height: 16),
+                                    TextFormField(
+                                      controller: _confirmPasswordController,
+                                      obscureText: _obscureConfirmPassword,
+                                      decoration: InputDecoration(
+                                        labelText: 'Confirmar contraseña',
+                                        prefixIcon: const Icon(Icons.lock_outlined),
+                                        suffixIcon: IconButton(
+                                          icon: Icon(_obscureConfirmPassword
+                                              ? Icons.visibility_off_outlined
+                                              : Icons.visibility_outlined),
+                                          onPressed: () {
+                                            setState(() {
+                                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                                            });
+                                          },
+                                        ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                      ),
+                                      validator: (value) {
+                                        if (value == null || value.isEmpty) {
+                                          return 'Confirma tu contraseña';
+                                        }
+                                        if (value != _passwordController.text) {
+                                          return 'Las contraseñas no coinciden';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ],
                                   const SizedBox(height: 12),
                                   if (!_isSignUp)
                                     Align(
@@ -264,6 +353,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         child: const Text('¿Olvidaste tu contraseña?'),
                                       ),
                                     ),
+                                  // Banner de error visible directamente en el formulario.
+                                  // No depende de que el SnackBar alcance a mostrarse: se
+                                  // pinta en cuanto authState.lastError tiene un valor.
+                                  if (authState.lastError != null) ...[
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: Colors.redAccent, width: 1),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(Icons.error_outline,
+                                              color: Colors.redAccent, size: 20),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              authState.lastError!,
+                                              style: const TextStyle(
+                                                color: Colors.redAccent,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 16),
                                   ElevatedButton(
                                     onPressed: _submit,
@@ -337,6 +461,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   _isSignUp = !_isSignUp;
                                   _formKey.currentState?.reset();
                                 });
+                                ref.read(authProvider.notifier).clearError();
                               },
                               child: Text(
                                 _isSignUp ? 'Inicia Sesión' : 'Regístrate',

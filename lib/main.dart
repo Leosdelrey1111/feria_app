@@ -50,9 +50,14 @@ class _MyAppState extends ConsumerState<MyApp> {
           ref.read(routerProvider).go('/?tab=3');
         } else if (type == 'request_sync') {
           // El reloj solicita una sincronización forzada de todos los datos
-          ref.read(authProvider.notifier).syncAuthStateToWatch();
-          ref.read(ticketProvider.notifier).syncTicketsToWatch();
-          ref.read(activityProvider.notifier).syncFavoritesToWatch();
+          final authNotifier = ref.read(authProvider.notifier);
+          if (!authNotifier.state.wearConnected && authNotifier.state.isLoggedIn) {
+            authNotifier.syncSmartwatch();
+          } else {
+            authNotifier.syncAuthStateToWatch();
+            ref.read(ticketProvider.notifier).syncTicketsToWatch();
+            ref.read(activityProvider.notifier).syncFavoritesToWatch();
+          }
         }
       };
     });

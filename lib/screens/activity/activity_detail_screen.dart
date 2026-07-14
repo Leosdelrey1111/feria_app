@@ -22,16 +22,26 @@ class _ActivityDetailScreenState extends ConsumerState<ActivityDetailScreen> {
   // Contadores locales de reacciones
   final Map<String, int> _reactions = {'👍': 12, '❤️': 24, '😲': 3, '😱': 1};
 
-  final Map<String, bool> _votedReactions = {};
+  // Solo se permite UNA reacción por usuario a la vez (como pide el PDF:
+  // "Sección de reacciones rápidas del público en tiempo real"). Por eso,
+  // en vez de un mapa de booleans independientes por emoji, se guarda
+  // únicamente cuál fue la reacción elegida.
+  String? _selectedReaction;
 
   void _handleReaction(String emoji) {
     setState(() {
-      if (_votedReactions[emoji] == true) {
+      if (_selectedReaction == emoji) {
+        // Tocar la misma reacción otra vez la quita (deseleccionar)
         _reactions[emoji] = (_reactions[emoji] ?? 1) - 1;
-        _votedReactions[emoji] = false;
+        _selectedReaction = null;
       } else {
+        // Si había otra reacción seleccionada, se le resta su voto
+        if (_selectedReaction != null) {
+          _reactions[_selectedReaction!] =
+              (_reactions[_selectedReaction!] ?? 1) - 1;
+        }
         _reactions[emoji] = (_reactions[emoji] ?? 0) + 1;
-        _votedReactions[emoji] = true;
+        _selectedReaction = emoji;
       }
     });
   }
@@ -400,7 +410,7 @@ class _ActivityDetailScreenState extends ConsumerState<ActivityDetailScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: _reactions.keys.map((emoji) {
                       final count = _reactions[emoji]!;
-                      final voted = _votedReactions[emoji] ?? false;
+                      final voted = _selectedReaction == emoji;
                       return InkWell(
                         onTap: () => _handleReaction(emoji),
                         borderRadius: BorderRadius.circular(16),

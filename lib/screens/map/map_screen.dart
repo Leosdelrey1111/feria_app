@@ -207,8 +207,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final activityState = ref.watch(activityProvider);
     const double mapSize = 800.0;
 
-    // Obtener actividades en vivo de hoy para añadir pines dinámicos en los escenarios
-    final liveActivities = activityState.activities.where((act) => act.isLive).toList();
+    // Antes solo se marcaban en el mapa las actividades EN VIVO (isLive),
+    // así que casi siempre solo aparecía la Inauguración. Ahora se muestran
+    // TODAS las actividades programadas para el día de hoy: las que están
+    // en curso con el pin "LIVE" animado, y las próximas del día con un pin
+    // "Próximo" que incluye su hora de inicio.
+    final now = DateTime.now();
+    final todayActivities = activityState.activities.where((act) {
+      return act.startTime.year == now.year &&
+          act.startTime.month == now.month &&
+          act.startTime.day == now.day;
+    }).toList();
+
+    final liveActivities = todayActivities.where((act) => act.isLive).toList();
+    final upcomingTodayActivities =
+        todayActivities.where((act) => !act.isLive).toList();
 
     // Filtrar puntos del mapa a renderizar basados en filtros seleccionados y búsqueda
     final query = _searchController.text.toLowerCase();
@@ -221,6 +234,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     // Actividades asociadas a escenarios si se filtran escenarios
     final filteredLiveActPines = liveActivities.where((act) {
+      if (!_activeFilters.contains('Escenarios')) return false;
+      if (query.isNotEmpty && !act.title.toLowerCase().contains(query)) return false;
+      return true;
+    }).toList();
+
+    final filteredUpcomingActPines = upcomingTodayActivities.where((act) {
       if (!_activeFilters.contains('Escenarios')) return false;
       if (query.isNotEmpty && !act.title.toLowerCase().contains(query)) return false;
       return true;
@@ -385,6 +404,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           );
                         }).toList(),
 
+                        // Pines de Actividades próximas del día (no en vivo todavía)
+                        ...filteredUpcomingActPines.map((act) {
+                          return Positioned(
+                            left: act.mapX * mapSize - 16,
+                            top: act.mapY * mapSize - 34,
+                            child: _upcomingActivityMarker(
+                              act: act,
+                              theme: theme,
+                            ),
+                          );
+                        }).toList(),
+
                         // Pines de Actividades En Vivo (destacadas e intermitentes)
                         ...filteredLiveActPines.map((act) {
                           return Positioned(
@@ -543,6 +574,61 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 7,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Widget para marcador de Actividades próximas de hoy (aún no en vivo)
+  Widget _upcomingActivityMarker({
+    required Activity act,
+    required ThemeData theme,
+  }) {
+    final timeLabel =
+        '${act.startTime.hour.toString().padLeft(2, '0')}:${act.startTime.minute.toString().padLeft(2, '0')}';
+    return GestureDetector(
+      onTap: () {
+        context.push('/activity/${act.id}');
+      },
+      child: Tooltip(
+        message: '${act.title} · $timeLabel',
+        triggerMode: TooltipTriggerMode.tap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondary,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.schedule, size: 14, color: Colors.white),
+            ),
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.secondary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                timeLabel,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 8,
                   fontWeight: FontWeight.bold,
                 ),
               ),
