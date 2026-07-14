@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'home_screen.dart';
 import '../map/map_screen.dart';
 import '../tickets/wallet_screen.dart';
@@ -66,6 +67,7 @@ class _HubScreenState extends ConsumerState<HubScreen> {
             setState(() {
               _currentIndex = index;
             });
+            context.go('/?tab=$index');
           },
           items: const [
             BottomNavigationBarItem(

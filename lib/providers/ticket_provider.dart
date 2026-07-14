@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/ticket.dart';
 import '../services/ticket_service.dart';
+import '../services/watch_sync_service.dart';
+import 'watch_sync_provider.dart';
 
 class TicketState {
   final List<Ticket> tickets;
@@ -24,9 +26,18 @@ class TicketState {
 
 class TicketNotifier extends StateNotifier<TicketState> {
   final TicketService _service;
+  final WatchSyncService _watchSyncService;
 
-  TicketNotifier(this._service) : super(TicketState()) {
+  TicketNotifier(this._service, this._watchSyncService) : super(TicketState()) {
     loadTickets();
+  }
+
+  // Sincronizar boletos con el reloj
+  void syncTicketsToWatch() {
+    _watchSyncService.sendMessage({
+      'type': 'tickets',
+      'tickets': state.tickets.map((t) => t.toJson()).toList(),
+    });
   }
 
   // Cargar boletos guardados
@@ -35,6 +46,7 @@ class TicketNotifier extends StateNotifier<TicketState> {
     try {
       final list = await _service.getPurchasedTickets();
       state = state.copyWith(tickets: list, isLoading: false);
+      syncTicketsToWatch();
     } catch (_) {
       state = state.copyWith(isLoading: false);
     }
@@ -61,7 +73,7 @@ class TicketNotifier extends StateNotifier<TicketState> {
       );
 
       await _service.purchaseTicket(newTicket);
-      await loadTickets(); // Recargar de SharedPreferences
+      await loadTickets(); // Recargar y sincronizar
       return true;
     } catch (_) {
       state = state.copyWith(isLoading: false);
@@ -73,6 +85,10 @@ class TicketNotifier extends StateNotifier<TicketState> {
   Future<void> clearAll() async {
     await _service.clearTickets();
     state = TicketState();
+    _watchSyncService.sendMessage({
+      'type': 'tickets',
+      'tickets': [],
+    });
   }
 }
 
@@ -84,5 +100,7 @@ final ticketServiceProvider = Provider<TicketService>((ref) {
 // Provider del estado del wallet de boletos
 final ticketProvider = StateNotifierProvider<TicketNotifier, TicketState>((ref) {
   final service = ref.watch(ticketServiceProvider);
-  return TicketNotifier(service);
+  final syncService = ref.watch(watchSyncServiceProvider);
+  return TicketNotifier(service, syncService);
 });
+

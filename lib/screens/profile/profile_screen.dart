@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
-import '../../theme/app_theme.dart';
+import '../../providers/watch_sync_provider.dart';
+
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -335,6 +336,101 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
+
+                      if (authState.wearConnected) ...[
+                        _sectionTitle('Simulación de Envíos al Smartwatch'),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              children: [
+                                const Text(
+                                  'Prueba el comportamiento del Smartwatch enviando notificaciones y alertas en tiempo real:',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                                const SizedBox(height: 12),
+                                LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      alignment: WrapAlignment.center,
+                                      children: [
+                                        ElevatedButton.icon(
+                                          onPressed: () {
+                                            ref.read(watchSyncServiceProvider).sendMessage({
+                                              'type': 'trigger_alert',
+                                              'alert': {
+                                                'id': 'ALT-TEST-EMERG',
+                                                'message': '¡Evacuar zona sur! Fuga menor de gas controlada.',
+                                                'fullMessage': 'Se ha reportado un olor inusual en el área de comida de la zona sur. Por precaución y para ventilación del área, evacúe de manera ordenada.',
+                                                'urgency': 'emergency',
+                                                'timestamp': '12:15'
+                                              }
+                                            });
+                                          },
+                                          icon: const Icon(Icons.emergency, size: 16),
+                                          label: const Text('Alerta Emergencia (W-07)', style: TextStyle(fontSize: 11)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.redAccent,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                        ),
+                                        ElevatedButton.icon(
+                                          onPressed: () {
+                                            ref.read(watchSyncServiceProvider).sendMessage({
+                                              'type': 'trigger_alert',
+                                              'alert': {
+                                                'id': 'ALT-TEST-OP',
+                                                'message': 'Cambio de escenario: Mariachi ahora en Zona A',
+                                                'fullMessage': 'Debido a ajustes técnicos en el escenario principal, el Concierto de Mariachi se traslada a la Zona A techada.',
+                                                'urgency': 'operational',
+                                                'timestamp': '12:18'
+                                              }
+                                            });
+                                          },
+                                          icon: const Icon(Icons.info, size: 16),
+                                          label: const Text('Aviso Operativo (W-07)', style: TextStyle(fontSize: 11)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.orangeAccent,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                        ),
+                                        ElevatedButton.icon(
+                                          onPressed: () {
+                                            ref.read(watchSyncServiceProvider).sendMessage({
+                                              'type': 'trigger_reminder',
+                                              'event': {
+                                                'id': 'act-01',
+                                                'name': 'Espectáculo Folclórico Especial',
+                                                'location': 'Escenario Principal',
+                                                'time': '18:00',
+                                                'endTime': '19:00',
+                                                'duration': '1h',
+                                                'icon': '🎭'
+                                              }
+                                            });
+                                          },
+                                          icon: const Icon(Icons.notifications_active, size: 16),
+                                          label: const Text('Recordatorio Evento (W-05)', style: TextStyle(fontSize: 11)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.blueAccent,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
                       // --- SECCIÓN: INTERFAZ Y TEMA ---
                       _sectionTitle('Configuración Visual'),

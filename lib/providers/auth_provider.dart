@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_service.dart';
+import '../services/watch_sync_service.dart';
+import 'watch_sync_provider.dart';
 
 class AuthState {
   final bool isLoading;
@@ -43,10 +45,25 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
+  final WatchSyncService _watchSyncService;
 
-  AuthNotifier(this._authService) : super(AuthState()) {
+  AuthNotifier(this._authService, this._watchSyncService) : super(AuthState()) {
     _loadSession();
   }
+
+  void _syncAuthStateToWatch() {
+    _watchSyncService.sendMessage({
+      'type': 'auth_state',
+      'isLoggedIn': state.isLoggedIn,
+      'isVisitor': state.isVisitor,
+      'name': state.name,
+      'email': state.email,
+      'wearConnected': state.wearConnected,
+      'reminderMinutes': state.reminderMinutes,
+    });
+  }
+
+  void syncAuthStateToWatch() => _syncAuthStateToWatch();
 
   // Cargar sesión inicial al abrir la app
   Future<void> _loadSession() async {
@@ -70,6 +87,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } else {
       state = state.copyWith(isLoading: false);
     }
+    _syncAuthStateToWatch();
   }
 
   // Iniciar sesión normal
@@ -89,6 +107,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
           wearConnected: true,
           isLoading: false,
         );
+        _syncAuthStateToWatch();
+        // Solicitar sincronización de los demás datos
+        _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
       }
     } catch (_) {}
@@ -111,6 +132,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           wearConnected: true,
           isLoading: false,
         );
+        _syncAuthStateToWatch();
+        _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
       }
     } catch (_) {}
@@ -135,6 +158,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           wearConnected: true,
           isLoading: false,
         );
+        _syncAuthStateToWatch();
+        _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
       }
     } catch (_) {}
@@ -157,12 +182,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       wearConnected: false,
       isLoading: false,
     );
+    _syncAuthStateToWatch();
   }
 
   // Cambiar configuración de minutos de recordatorio
   Future<void> updateReminderMinutes(int minutes) async {
     await _authService.saveReminderMinutes(minutes);
     state = state.copyWith(reminderMinutes: minutes);
+    _syncAuthStateToWatch();
   }
 
   // Sincronizar Smartwatch (Mock)
@@ -171,12 +198,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await Future.delayed(const Duration(milliseconds: 1500));
     await _authService.saveWearConnected(true);
     state = state.copyWith(wearConnected: true, isLoading: false);
+    _syncAuthStateToWatch();
+    _watchSyncService.sendMessage({'type': 'request_sync'});
   }
 
   // Desvincular Smartwatch (Mock)
   Future<void> disconnectSmartwatch() async {
     await _authService.saveWearConnected(false);
     state = state.copyWith(wearConnected: false);
+    _syncAuthStateToWatch();
   }
 
   // Cerrar sesión
@@ -184,6 +214,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true);
     await _authService.logout();
     state = AuthState();
+    _syncAuthStateToWatch();
   }
 
   // Eliminar cuenta
@@ -192,6 +223,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _authService.deleteAccount();
       state = AuthState();
+      _syncAuthStateToWatch();
       return true;
     } catch (_) {}
     state = state.copyWith(isLoading: false);
@@ -207,5 +239,7 @@ final authServiceProvider = Provider<AuthService>((ref) {
 // Provider de estado AuthState
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final service = ref.watch(authServiceProvider);
-  return AuthNotifier(service);
+  final syncService = ref.watch(watchSyncServiceProvider);
+  return AuthNotifier(service, syncService);
 });
+

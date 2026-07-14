@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/activity.dart';
 import '../services/activity_service.dart';
+import '../services/watch_sync_service.dart';
+import 'watch_sync_provider.dart';
 
 class ActivityState {
   final List<Activity> activities;
@@ -37,9 +39,53 @@ class ActivityState {
 
 class ActivityNotifier extends StateNotifier<ActivityState> {
   final ActivityService _service;
+  final WatchSyncService _watchSyncService;
 
-  ActivityNotifier(this._service) : super(ActivityState()) {
+  ActivityNotifier(this._service, this._watchSyncService) : super(ActivityState()) {
     loadActivities();
+  }
+
+  // Sincronizar favoritos con el reloj
+  void syncFavoritesToWatch() {
+    final favList = state.activities.where((act) => state.favoriteIds.contains(act.id)).map((act) {
+      String icon = '📅';
+      switch (act.category) {
+        case 'Música': icon = '🎵'; break;
+        case 'Concursos': icon = '🏆'; break;
+        case 'Arte': icon = '🎭'; break;
+        case 'Gastronomía': icon = '🍲'; break;
+        case 'Infantil': icon = '🎈'; break;
+      }
+      
+      final now = DateTime.now();
+      String statusStr = 'upcoming';
+      if (now.isAfter(act.endTime)) {
+        statusStr = 'finished';
+      } else if (now.isAfter(act.startTime) && now.isBefore(act.endTime)) {
+        statusStr = 'ongoing';
+      }
+
+      String pad(int value) => value.toString().padLeft(2, '0');
+      final timeStr = '${pad(act.startTime.hour)}:${pad(act.startTime.minute)}';
+      final endTimeStr = '${pad(act.endTime.hour)}:${pad(act.endTime.minute)}';
+
+      return {
+        'id': act.id,
+        'name': act.title,
+        'shortName': act.title,
+        'location': act.locationName,
+        'time': timeStr,
+        'endTime': endTimeStr,
+        'duration': '${act.durationInMinutes} min',
+        'status': statusStr,
+        'icon': icon,
+      };
+    }).toList();
+
+    _watchSyncService.sendMessage({
+      'type': 'favorites',
+      'favorites': favList,
+    });
   }
 
   // Cargar actividades y favoritos
@@ -53,6 +99,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
         favoriteIds: favs,
         isLoading: false,
       );
+      syncFavoritesToWatch();
     } catch (_) {
       state = state.copyWith(isLoading: false);
     }
@@ -76,6 +123,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
   Future<void> toggleFavorite(String id) async {
     final updatedFavs = await _service.toggleFavorite(id);
     state = state.copyWith(favoriteIds: updatedFavs);
+    syncFavoritesToWatch();
   }
 }
 
@@ -87,8 +135,10 @@ final activityServiceProvider = Provider<ActivityService>((ref) {
 // Provider del estado de actividades
 final activityProvider = StateNotifierProvider<ActivityNotifier, ActivityState>((ref) {
   final service = ref.watch(activityServiceProvider);
-  return ActivityNotifier(service);
+  final syncService = ref.watch(watchSyncServiceProvider);
+  return ActivityNotifier(service, syncService);
 });
 
 // Provider para destacar una actividad en el mapa
 final selectedMapActivityProvider = StateProvider<Activity?>((ref) => null);
+
