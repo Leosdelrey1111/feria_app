@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/theme_provider.dart';
-import '../../providers/watch_sync_provider.dart';
+import '../../providers/providers.dart';
 
 
 class ProfileScreen extends ConsumerStatefulWidget {

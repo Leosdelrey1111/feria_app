@@ -1,12 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/auth_provider.dart';
-import '../screens/auth/login_screen.dart';
-import '../screens/hub/hub_screen.dart';
-import '../screens/activity/activity_detail_screen.dart';
-import '../screens/tickets/buy_tickets_screen.dart';
-import '../screens/polls/polls_screen.dart';
+import '../providers/providers.dart';
+import '../screens/screens.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Observar el estado de autenticación para activar redirecciones si cambia la sesión
@@ -26,6 +21,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final initialTab = int.tryParse(tabStr ?? '0') ?? 0;
           return HubScreen(initialTab: initialTab);
         },
+      ),
+      GoRoute(
+        path: '/activity/create',
+        builder: (context, state) => const CreateActivityScreen(),
       ),
       GoRoute(
         path: '/activity/:id',

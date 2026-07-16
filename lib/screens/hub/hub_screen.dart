@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'home_screen.dart';
-import '../map/map_screen.dart';
-import '../tickets/wallet_screen.dart';
-import '../profile/profile_screen.dart';
-import '../../providers/auth_provider.dart';
+import '../map/map.dart';
+import '../tickets/tickets.dart';
+import '../profile/profile.dart';
+import '../../providers/providers.dart';
 
 class HubScreen extends ConsumerStatefulWidget {
   final int initialTab;

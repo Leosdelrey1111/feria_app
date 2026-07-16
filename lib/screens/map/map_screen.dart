@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
-import '../../models/activity.dart';
-import '../../providers/activity_provider.dart';
-import '../../theme/app_theme.dart';
+import '../../models/models.dart';
+import '../../providers/providers.dart';
+import '../../theme/theme.dart';
 
 // Modelo para puntos fijos del mapa (Servicios)
 class MapPOI {

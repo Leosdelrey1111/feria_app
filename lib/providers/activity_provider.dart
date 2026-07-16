@@ -125,6 +125,39 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     state = state.copyWith(favoriteIds: updatedFavs);
     syncFavoritesToWatch();
   }
+
+  // Crear una actividad/tarea personalizada y recargar la lista
+  Future<Activity> createActivity({
+    required String title,
+    required String description,
+    required String speaker,
+    required String category,
+    required DateTime startTime,
+    required DateTime endTime,
+    required String locationName,
+    double mapX = 0.5,
+    double mapY = 0.5,
+  }) async {
+    final created = await _service.createActivity(
+      title: title,
+      description: description,
+      speaker: speaker,
+      category: category,
+      startTime: startTime,
+      endTime: endTime,
+      locationName: locationName,
+      mapX: mapX,
+      mapY: mapY,
+    );
+    await loadActivities();
+    return created;
+  }
+
+  // Eliminar una actividad/tarea personalizada y recargar la lista
+  Future<void> deleteActivity(String id) async {
+    await _service.deleteActivity(id);
+    await loadActivities();
+  }
 }
 
 // Provider de ActivityService

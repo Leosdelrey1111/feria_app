@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../models/activity.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/activity_provider.dart';
-import '../../services/notification_service.dart';
-import '../../theme/app_theme.dart';
+import '../../models/models.dart';
+import '../../providers/providers.dart';
+import '../../services/services.dart';
+import '../../theme/theme.dart';
 
 class ActivityDetailScreen extends ConsumerStatefulWidget {
   final String activityId;
@@ -76,6 +75,48 @@ class _ActivityDetailScreenState extends ConsumerState<ActivityDetailScreen> {
               foregroundColor: Colors.white,
             ),
             child: const Text('Iniciar Sesión'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, Activity activity) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.delete_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Eliminar actividad'),
+          ],
+        ),
+        content: Text(
+          '¿Seguro que quieres eliminar "${activity.title}" de tu agenda? Esta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await ref.read(activityProvider.notifier).deleteActivity(activity.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Actividad eliminada.')),
+                );
+                context.pop();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Eliminar'),
           ),
         ],
       ),
@@ -207,6 +248,14 @@ class _ActivityDetailScreenState extends ConsumerState<ActivityDetailScreen> {
                   }
                 },
               ),
+              // Solo las actividades creadas por el propio usuario se
+              // pueden borrar; el programa oficial de la feria está protegido.
+              if (activity.isCustom)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.white),
+                  tooltip: 'Eliminar actividad',
+                  onPressed: () => _confirmDelete(context, activity),
+                ),
             ],
           ),
 

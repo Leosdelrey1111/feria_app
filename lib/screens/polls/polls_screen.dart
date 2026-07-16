@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../models/poll.dart';
-import '../../providers/poll_provider.dart';
-import '../../theme/app_theme.dart';
+import 'package:mi_feria_inteligente/providers/providers.dart';
+import 'package:mi_feria_inteligente/theme/theme.dart';
 
 class PollsScreen extends ConsumerStatefulWidget {
   const PollsScreen({super.key});

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../../models/ticket.dart';
-
+import '../../models/models.dart';
 /// Pantalla de pantalla completa para el código QR de un boleto.
 ///
 /// El PDF pide que el QR se pueda ver "a pantalla completa, optimizado

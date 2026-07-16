@@ -3,10 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../../models/ticket.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/ticket_provider.dart';
-import '../../theme/app_theme.dart';
+import '../../models/models.dart';
+import '../../providers/providers.dart';
+import '../../theme/theme.dart';
 import 'qr_fullscreen_screen.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {

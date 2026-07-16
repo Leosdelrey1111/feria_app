@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/activity_provider.dart';
-import '../../providers/poll_provider.dart';
-import '../../models/activity.dart';
-import '../../theme/app_theme.dart';
+import '../../providers/providers.dart';
+import '../../models/models.dart';
+import '../../theme/theme.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -591,6 +589,20 @@ class HomeScreen extends ConsumerWidget {
                 ],
               ),
             ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'add-activity-fab',
+        onPressed: () {
+          if (authState.isVisitor) {
+            _showVisitorCTA(context);
+          } else {
+            context.push('/activity/create');
+          }
+        },
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add_task),
+        label: const Text('Agregar'),
+      ),
     );
   }
 }

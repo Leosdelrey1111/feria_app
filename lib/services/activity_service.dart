@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/activity.dart';
 
 class ActivityService {
   static const String keyFavorites = 'favorite_activities';
+  static const String keyCustomActivities = 'custom_activities_v1';
 
   // Genera actividades dinámicas para que siempre coincidan con el día de ejecución
   List<Activity> generateMockActivities() {
@@ -157,10 +159,16 @@ class ActivityService {
     ];
   }
 
-  // Obtener actividades
+  // Obtener actividades: combina el programa oficial (mock) con las
+  // actividades personalizadas que el usuario haya creado y guardado
+  // localmente, ordenadas cronológicamente.
   Future<List<Activity>> getActivities() async {
     await Future.delayed(const Duration(milliseconds: 400));
-    return generateMockActivities();
+    final official = generateMockActivities();
+    final custom = await getCustomActivities();
+    final all = [...official, ...custom];
+    all.sort((a, b) => a.startTime.compareTo(b.startTime));
+    return all;
   }
 
   // Cargar favoritos
@@ -180,5 +188,94 @@ class ActivityService {
     }
     await prefs.setStringList(keyFavorites, favorites);
     return favorites;
+  }
+
+  // ---------------------------------------------------------------------
+  // Actividades personalizadas (tareas creadas por el usuario)
+  // ---------------------------------------------------------------------
+  //
+  // Se guardan como una lista de objetos JSON en SharedPreferences, bajo
+  // `keyCustomActivities`. El programa oficial (generateMockActivities)
+  // nunca se toca ni se persiste: siempre se regenera en memoria. Así,
+  // "reiniciar" el mock no borra lo que el usuario agregó por su cuenta.
+
+  Future<List<Activity>> getCustomActivities() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(keyCustomActivities) ?? [];
+    return raw
+        .map((jsonStr) => Activity.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> _saveCustomActivities(List<Activity> activities) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = activities.map((a) => jsonEncode(a.toJson())).toList();
+    await prefs.setStringList(keyCustomActivities, raw);
+  }
+
+  // Crear una nueva actividad/tarea personalizada
+  Future<Activity> createActivity({
+    required String title,
+    required String description,
+    required String speaker,
+    required String category,
+    required DateTime startTime,
+    required DateTime endTime,
+    required String locationName,
+    double mapX = 0.5,
+    double mapY = 0.5,
+  }) async {
+    final custom = await getCustomActivities();
+    final now = DateTime.now();
+    final newActivity = Activity(
+      // Prefijo 'custom-' para nunca chocar con los ids del mock (act-XX)
+      // y para poder identificar de forma segura qué se puede borrar.
+      id: 'custom-${now.millisecondsSinceEpoch}',
+      title: title,
+      description: description,
+      speaker: speaker.isEmpty ? 'Agregado por ti' : speaker,
+      category: category,
+      startTime: startTime,
+      endTime: endTime,
+      locationName: locationName,
+      isFeatured: false,
+      isLive: now.isAfter(startTime) && now.isBefore(endTime),
+      mapX: mapX,
+      mapY: mapY,
+      isCustom: true,
+    );
+    custom.add(newActivity);
+    await _saveCustomActivities(custom);
+    return newActivity;
+  }
+
+  // Editar una actividad personalizada existente
+  Future<void> updateActivity(Activity updated) async {
+    if (!updated.id.startsWith('custom-')) {
+      // Protección: nunca se editan actividades del programa oficial.
+      return;
+    }
+    final custom = await getCustomActivities();
+    final index = custom.indexWhere((a) => a.id == updated.id);
+    if (index != -1) {
+      custom[index] = updated;
+      await _saveCustomActivities(custom);
+    }
+  }
+
+  // Eliminar una actividad personalizada (solo las creadas por el usuario;
+  // las del programa oficial ('act-XX') están protegidas y se ignoran).
+  Future<void> deleteActivity(String id) async {
+    if (!id.startsWith('custom-')) return;
+    final custom = await getCustomActivities();
+    custom.removeWhere((a) => a.id == id);
+    await _saveCustomActivities(custom);
+
+    // También se limpia de favoritos si estaba marcada
+    final prefs = await SharedPreferences.getInstance();
+    final favorites = prefs.getStringList(keyFavorites) ?? [];
+    if (favorites.remove(id)) {
+      await prefs.setStringList(keyFavorites, favorites);
+    }
   }
 }
