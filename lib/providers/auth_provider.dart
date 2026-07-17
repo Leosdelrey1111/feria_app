@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/auth_service.dart';
 import '../services/watch_sync_service.dart';
@@ -9,6 +10,8 @@ class AuthState {
   final bool isVisitor;
   final String? name;
   final String? email;
+  // 'admin' o 'user'. Null cuando no hay sesión activa.
+  final String? role;
   final int reminderMinutes;
   final bool wearConnected;
   // Último error de autenticación, para que el login_screen lo muestre.
@@ -20,10 +23,15 @@ class AuthState {
     this.isVisitor = false,
     this.name,
     this.email,
+    this.role,
     this.reminderMinutes = 10,
     this.wearConnected = true,
     this.lastError,
   });
+
+  // El administrador es el único que puede crear, editar o eliminar
+  // actividades del programa de la feria (oficiales o propias).
+  bool get isAdmin => role == AppRole.admin;
 
   AuthState copyWith({
     bool? isLoading,
@@ -31,6 +39,7 @@ class AuthState {
     bool? isVisitor,
     String? name,
     String? email,
+    String? role,
     int? reminderMinutes,
     bool? wearConnected,
     String? lastError,
@@ -41,6 +50,7 @@ class AuthState {
       isVisitor: isVisitor ?? this.isVisitor,
       name: name ?? this.name,
       email: email ?? this.email,
+      role: role ?? this.role,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       wearConnected: wearConnected ?? this.wearConnected,
       lastError: lastError,
@@ -51,6 +61,11 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
   final WatchSyncService _watchSyncService;
+
+  // Cierre de sesión automático por inactividad: si nadie toca la app
+  // durante este tiempo, se cierra la sesión y se manda de regreso al login.
+  static const Duration inactivityLimit = Duration(minutes: 30);
+  Timer? _inactivityTimer;
 
   AuthNotifier(this._authService, this._watchSyncService) : super(AuthState()) {
     _loadSession();
@@ -70,13 +85,50 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void syncAuthStateToWatch() => _syncAuthStateToWatch();
 
-  // Cargar sesión inicial al abrir la app
+  // ---------------------------------------------------------------------
+  // Temporizador de inactividad (30 minutos)
+  // ---------------------------------------------------------------------
+  //
+  // Se llama cada vez que el usuario interactúa con la app (ver el
+  // `Listener` global en main.dart). Si pasan 30 minutos sin ninguna
+  // interacción mientras hay sesión activa, se cierra la sesión sola.
+  void registerActivity() {
+    if (!state.isLoggedIn) return;
+    _inactivityTimer?.cancel();
+    _inactivityTimer = Timer(inactivityLimit, _handleInactivityTimeout);
+  }
+
+  void _cancelInactivityTimer() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = null;
+  }
+
+  Future<void> _handleInactivityTimeout() async {
+    await _authService.logout();
+    state = AuthState(lastError: 'Tu sesión se cerró por inactividad. Vuelve a iniciar sesión.');
+    _syncAuthStateToWatch();
+  }
+
+  @override
+  void dispose() {
+    _cancelInactivityTimer();
+    super.dispose();
+  }
+
+  // Cargar sesión inicial al abrir la app.
+  //
+  // IMPORTANTE: AuthService guarda la sesión SOLO en memoria (no en
+  // SharedPreferences), así que en un reinicio real de la app (proceso
+  // nuevo) esto siempre encontrará que no hay sesión y mandará al login,
+  // tal como se pidió. Esta función solo sigue siendo útil para
+  // reconstrucciones en caliente (hot reload) dentro de la misma corrida.
   Future<void> _loadSession() async {
     state = state.copyWith(isLoading: true);
     final loggedIn = await _authService.isLoggedIn();
     if (loggedIn) {
       final name = await _authService.getUserName();
       final email = await _authService.getUserEmail();
+      final role = await _authService.getUserRole();
       final visitor = await _authService.isVisitor();
       final mins = await _authService.getReminderMinutes();
       final wear = await _authService.isWearConnected();
@@ -85,10 +137,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         isVisitor: visitor,
         name: name,
         email: email,
+        role: role,
         reminderMinutes: mins,
         wearConnected: wear,
         isLoading: false,
       );
+      registerActivity();
     } else {
       state = state.copyWith(isLoading: false);
     }
@@ -103,15 +157,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (result.success) {
         final name = await _authService.getUserName();
         final userEmail = await _authService.getUserEmail();
+        final role = await _authService.getUserRole();
         state = AuthState(
           isLoggedIn: true,
           isVisitor: false,
           name: name,
           email: userEmail,
+          role: role,
           reminderMinutes: 10,
           wearConnected: true,
           isLoading: false,
         );
+        registerActivity();
         _syncAuthStateToWatch();
         _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
@@ -125,7 +182,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  // Registrar cuenta (falla si el correo ya existe)
+  // Registrar cuenta (falla si el correo ya existe). Siempre crea la
+  // cuenta con rol "user"; el rol de administrador nunca se auto-asigna.
   Future<bool> register(String name, String email, String password) async {
     state = state.copyWith(isLoading: true, lastError: null);
     try {
@@ -136,10 +194,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
           isVisitor: false,
           name: name,
           email: email,
+          role: AppRole.user,
           reminderMinutes: 10,
           wearConnected: true,
           isLoading: false,
         );
+        registerActivity();
         _syncAuthStateToWatch();
         _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
@@ -161,15 +221,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (result.success) {
         final name = await _authService.getUserName();
         final email = await _authService.getUserEmail();
+        final role = await _authService.getUserRole();
         state = AuthState(
           isLoggedIn: true,
           isVisitor: false,
           name: name,
           email: email,
+          role: role,
           reminderMinutes: 10,
           wearConnected: true,
           isLoading: false,
         );
+        registerActivity();
         _syncAuthStateToWatch();
         _watchSyncService.sendMessage({'type': 'request_sync'});
         return true;
@@ -189,15 +252,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _authService.enterAsVisitor();
     final name = await _authService.getUserName();
     final email = await _authService.getUserEmail();
+    final role = await _authService.getUserRole();
     state = AuthState(
       isLoggedIn: true,
       isVisitor: true,
       name: name,
       email: email,
+      role: role,
       reminderMinutes: 10,
       wearConnected: true,
       isLoading: false,
     );
+    registerActivity();
     _syncAuthStateToWatch();
   }
 
@@ -235,6 +301,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // Cerrar sesión
   Future<void> logout() async {
     state = state.copyWith(isLoading: true);
+    _cancelInactivityTimer();
     await _authService.logout();
     state = AuthState();
     _syncAuthStateToWatch();
@@ -245,6 +312,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true);
     try {
       await _authService.deleteAccount();
+      _cancelInactivityTimer();
       state = AuthState();
       _syncAuthStateToWatch();
       return true;
@@ -265,4 +333,3 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final syncService = ref.watch(watchSyncServiceProvider);
   return AuthNotifier(service, syncService);
 });
-

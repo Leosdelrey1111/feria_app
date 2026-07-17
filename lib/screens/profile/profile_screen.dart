@@ -163,6 +163,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           authState.email ?? 'visitante@miferia.com',
                           style: const TextStyle(color: Colors.grey, fontSize: 14),
                         ),
+                        if (authState.isAdmin) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.verified_user, size: 14, color: Theme.of(context).colorScheme.primary),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Administrador',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         if (authState.isVisitor) ...[
                           const SizedBox(height: 12),
                           Container(

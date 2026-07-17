@@ -5,6 +5,13 @@ import '../models/activity.dart';
 class ActivityService {
   static const String keyFavorites = 'favorite_activities';
   static const String keyCustomActivities = 'custom_activities_v1';
+  // Ids de actividades OFICIALES que un administrador decidió eliminar.
+  // No se puede borrar el generador de datos mock, así que en vez de eso
+  // se guarda una lista de ids a excluir cada vez que se arma la agenda.
+  static const String keyHiddenOfficialIds = 'hidden_official_activity_ids_v1';
+  // Ediciones que un administrador hizo sobre actividades OFICIALES.
+  // Se guardan aparte y se aplican encima del mock al construir la lista.
+  static const String keyOfficialOverrides = 'official_activity_overrides_v1';
 
   // Genera actividades dinámicas para que siempre coincidan con el día de ejecución
   List<Activity> generateMockActivities() {
@@ -159,12 +166,22 @@ class ActivityService {
     ];
   }
 
-  // Obtener actividades: combina el programa oficial (mock) con las
-  // actividades personalizadas que el usuario haya creado y guardado
-  // localmente, ordenadas cronológicamente.
+  // Obtener actividades: combina el programa oficial (mock, con las
+  // ediciones de administrador ya aplicadas) con las actividades
+  // personalizadas del usuario, excluyendo las oficiales que un
+  // administrador haya eliminado, y ordena todo cronológicamente.
   Future<List<Activity>> getActivities() async {
     await Future.delayed(const Duration(milliseconds: 400));
-    final official = generateMockActivities();
+    final prefs = await SharedPreferences.getInstance();
+
+    final hiddenIds = (prefs.getStringList(keyHiddenOfficialIds) ?? []).toSet();
+    final overrides = await _loadOfficialOverrides(prefs);
+
+    final official = generateMockActivities()
+        .where((a) => !hiddenIds.contains(a.id))
+        .map((a) => overrides.containsKey(a.id) ? overrides[a.id]! : a)
+        .toList();
+
     final custom = await getCustomActivities();
     final all = [...official, ...custom];
     all.sort((a, b) => a.startTime.compareTo(b.startTime));
@@ -249,33 +266,64 @@ class ActivityService {
     return newActivity;
   }
 
-  // Editar una actividad personalizada existente
+  // Editar una actividad existente. Si es personalizada ('custom-'), se
+  // actualiza en su propia lista. Si es del programa oficial ('act-XX'),
+  // se guarda como un "override" que se aplica encima del mock.
+  // Quién puede llamar esto se decide en la capa de arriba (solo admin).
   Future<void> updateActivity(Activity updated) async {
-    if (!updated.id.startsWith('custom-')) {
-      // Protección: nunca se editan actividades del programa oficial.
-      return;
-    }
-    final custom = await getCustomActivities();
-    final index = custom.indexWhere((a) => a.id == updated.id);
-    if (index != -1) {
-      custom[index] = updated;
-      await _saveCustomActivities(custom);
+    if (updated.id.startsWith('custom-')) {
+      final custom = await getCustomActivities();
+      final index = custom.indexWhere((a) => a.id == updated.id);
+      if (index != -1) {
+        custom[index] = updated;
+        await _saveCustomActivities(custom);
+      }
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final overrides = await _loadOfficialOverrides(prefs);
+      overrides[updated.id] = updated;
+      await _saveOfficialOverrides(prefs, overrides);
     }
   }
 
-  // Eliminar una actividad personalizada (solo las creadas por el usuario;
-  // las del programa oficial ('act-XX') están protegidas y se ignoran).
+  // Eliminar una actividad. Si es personalizada, se quita de su lista.
+  // Si es del programa oficial, se agrega a la lista de ocultas (no se
+  // puede borrar el generador mock, así que se excluye al armar la agenda).
+  // Quién puede llamar esto se decide en la capa de arriba (solo admin).
   Future<void> deleteActivity(String id) async {
-    if (!id.startsWith('custom-')) return;
-    final custom = await getCustomActivities();
-    custom.removeWhere((a) => a.id == id);
-    await _saveCustomActivities(custom);
+    final prefs = await SharedPreferences.getInstance();
+
+    if (id.startsWith('custom-')) {
+      final custom = await getCustomActivities();
+      custom.removeWhere((a) => a.id == id);
+      await _saveCustomActivities(custom);
+    } else {
+      final hiddenIds = (prefs.getStringList(keyHiddenOfficialIds) ?? []).toList();
+      if (!hiddenIds.contains(id)) {
+        hiddenIds.add(id);
+        await prefs.setStringList(keyHiddenOfficialIds, hiddenIds);
+      }
+    }
 
     // También se limpia de favoritos si estaba marcada
-    final prefs = await SharedPreferences.getInstance();
     final favorites = prefs.getStringList(keyFavorites) ?? [];
     if (favorites.remove(id)) {
       await prefs.setStringList(keyFavorites, favorites);
     }
+  }
+
+  Future<Map<String, Activity>> _loadOfficialOverrides(SharedPreferences prefs) async {
+    final raw = prefs.getStringList(keyOfficialOverrides) ?? [];
+    final map = <String, Activity>{};
+    for (final jsonStr in raw) {
+      final activity = Activity.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
+      map[activity.id] = activity;
+    }
+    return map;
+  }
+
+  Future<void> _saveOfficialOverrides(SharedPreferences prefs, Map<String, Activity> overrides) async {
+    final raw = overrides.values.map((a) => jsonEncode(a.toJson())).toList();
+    await prefs.setStringList(keyOfficialOverrides, raw);
   }
 }

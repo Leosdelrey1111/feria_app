@@ -182,7 +182,7 @@ class _BuyTicketsScreenState extends ConsumerState<BuyTicketsScreen> {
                             ),
                           ),
                         );
-                      }).toList(),
+                      }),
 
                       // 2. Cantidad y Fecha
                       const SizedBox(height: 20),
@@ -289,7 +289,7 @@ class _BuyTicketsScreenState extends ConsumerState<BuyTicketsScreen> {
                               });
                             },
                           );
-                        }).toList(),
+                        }),
                       ],
 
                       // 4. Resumen y Desglose

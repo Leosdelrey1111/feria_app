@@ -71,6 +71,16 @@ class _MyAppState extends ConsumerState<MyApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       routerConfig: router,
+      builder: (context, child) {
+        // Cualquier toque, arrastre o scroll en la app reinicia el
+        // contador de 30 minutos de inactividad (ver AuthNotifier).
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => ref.read(authProvider.notifier).registerActivity(),
+          onPointerSignal: (_) => ref.read(authProvider.notifier).registerActivity(),
+          child: child,
+        );
+      },
     );
   }
 }

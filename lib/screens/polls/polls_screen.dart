@@ -201,7 +201,7 @@ class _PollsScreenState extends ConsumerState<PollsScreen> {
                                     ],
                                   ),
                                 );
-                              }).toList(),
+                              }),
                               const SizedBox(height: 12),
                               const Center(
                                 child: Text(
@@ -222,7 +222,7 @@ class _PollsScreenState extends ConsumerState<PollsScreen> {
                                     });
                                   },
                                 );
-                              }).toList(),
+                              }),
                               const SizedBox(height: 12),
                               ElevatedButton(
                                 onPressed: _selectedOptions[poll.id] != null
@@ -238,7 +238,7 @@ class _PollsScreenState extends ConsumerState<PollsScreen> {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }),
 
                   const SizedBox(height: 32),
                   // Historial de Votaciones Anteriores
@@ -274,7 +274,7 @@ class _PollsScreenState extends ConsumerState<PollsScreen> {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }),
                   const SizedBox(height: 48),
                 ],
               ),

@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../models/models.dart';
 import '../../providers/providers.dart';
 
-/// Pantalla para agregar una actividad/tarea propia a la agenda.
+/// Pantalla para agregar (o editar, si `existing` viene lleno) una
+/// actividad de la agenda.
 ///
-/// El programa oficial de la feria (act-01 a act-10) viene predeterminado
-/// y no se puede editar ni borrar. Esta pantalla permite complementarlo con
-/// actividades personales del visitante: un recordatorio para verse con
-/// alguien en cierto stand, un plan propio, etc. Se guardan localmente y
-/// aparecen mezcladas con el resto de la agenda (M-02), en el mapa (M-04)
-/// y se pueden marcar como favoritas igual que las demás.
+/// El programa oficial de la feria y las actividades personales de
+/// cualquier usuario solo pueden crearse/editarse/eliminarse por un
+/// administrador (ver gating en activity_detail_screen.dart y
+/// home_screen.dart). Esta pantalla en sí no revalida el rol: confía en
+/// que solo se llega aquí desde un botón ya protegido.
 class CreateActivityScreen extends ConsumerStatefulWidget {
-  const CreateActivityScreen({super.key});
+  final Activity? existing;
+  const CreateActivityScreen({super.key, this.existing});
 
   @override
   ConsumerState<CreateActivityScreen> createState() => _CreateActivityScreenState();
@@ -46,6 +48,30 @@ class _CreateActivityScreenState extends ConsumerState<CreateActivityScreen> {
   double _mapY = 0.5;
 
   bool _isSaving = false;
+
+  bool get _isEditing => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    if (existing != null) {
+      _titleController.text = existing.title;
+      _descriptionController.text = existing.description;
+      _speakerController.text = existing.speaker;
+      _locationController.text = existing.locationName;
+      _selectedCategory = existing.category;
+      _startTime = TimeOfDay.fromDateTime(existing.startTime);
+      _endTime = TimeOfDay.fromDateTime(existing.endTime);
+      _mapX = existing.mapX;
+      _mapY = existing.mapY;
+
+      final today = DateTime.now();
+      final startDay = DateTime(existing.startTime.year, existing.startTime.month, existing.startTime.day);
+      final diff = startDay.difference(DateTime(today.year, today.month, today.day)).inDays;
+      _selectedDayIndex = diff.clamp(0, 2);
+    }
+  }
 
   @override
   void dispose() {
@@ -99,21 +125,37 @@ class _CreateActivityScreenState extends ConsumerState<CreateActivityScreen> {
 
     setState(() => _isSaving = true);
     try {
-      await ref.read(activityProvider.notifier).createActivity(
-            title: _titleController.text.trim(),
-            description: _descriptionController.text.trim(),
-            speaker: _speakerController.text.trim(),
-            category: _selectedCategory,
-            startTime: start,
-            endTime: end,
-            locationName: _locationController.text.trim(),
-            mapX: _mapX,
-            mapY: _mapY,
-          );
+      if (_isEditing) {
+        final updated = widget.existing!.copyWith(
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          speaker: _speakerController.text.trim(),
+          category: _selectedCategory,
+          startTime: start,
+          endTime: end,
+          locationName: _locationController.text.trim(),
+          mapX: _mapX,
+          mapY: _mapY,
+          isLive: DateTime.now().isAfter(start) && DateTime.now().isBefore(end),
+        );
+        await ref.read(activityProvider.notifier).updateActivity(updated);
+      } else {
+        await ref.read(activityProvider.notifier).createActivity(
+              title: _titleController.text.trim(),
+              description: _descriptionController.text.trim(),
+              speaker: _speakerController.text.trim(),
+              category: _selectedCategory,
+              startTime: start,
+              endTime: end,
+              locationName: _locationController.text.trim(),
+              mapX: _mapX,
+              mapY: _mapY,
+            );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Actividad agregada a tu agenda!'),
+          SnackBar(
+            content: Text(_isEditing ? '¡Actividad actualizada!' : '¡Actividad agregada a la agenda!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -133,7 +175,7 @@ class _CreateActivityScreenState extends ConsumerState<CreateActivityScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Agregar Actividad'),
+        title: Text(_isEditing ? 'Editar Actividad' : 'Agregar Actividad'),
       ),
       body: Form(
         key: _formKey,
@@ -334,8 +376,10 @@ class _CreateActivityScreenState extends ConsumerState<CreateActivityScreen> {
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Icon(Icons.add_task),
-              label: Text(_isSaving ? 'Guardando...' : 'Agregar a mi agenda'),
+                  : Icon(_isEditing ? Icons.save : Icons.add_task),
+              label: Text(_isSaving
+                  ? 'Guardando...'
+                  : (_isEditing ? 'Guardar cambios' : 'Agregar a mi agenda')),
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,

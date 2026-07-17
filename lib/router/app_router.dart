@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/models.dart';
 import '../providers/providers.dart';
 import '../screens/screens.dart';
 
@@ -24,7 +25,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/activity/create',
-        builder: (context, state) => const CreateActivityScreen(),
+        builder: (context, state) {
+          final existing = state.extra as Activity?;
+          return CreateActivityScreen(existing: existing);
+        },
       ),
       GoRoute(
         path: '/activity/:id',

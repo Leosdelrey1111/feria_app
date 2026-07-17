@@ -248,14 +248,20 @@ class _ActivityDetailScreenState extends ConsumerState<ActivityDetailScreen> {
                   }
                 },
               ),
-              // Solo las actividades creadas por el propio usuario se
-              // pueden borrar; el programa oficial de la feria está protegido.
-              if (activity.isCustom)
+              // Solo el administrador puede editar/eliminar actividades,
+              // sean del programa oficial o creadas por algún usuario.
+              if (authState.isAdmin) ...[
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                  tooltip: 'Editar actividad',
+                  onPressed: () => context.push('/activity/create', extra: activity),
+                ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.white),
                   tooltip: 'Eliminar actividad',
                   onPressed: () => _confirmDelete(context, activity),
                 ),
+              ],
             ],
           ),
 
@@ -562,7 +568,7 @@ class _ActivityDetailScreenState extends ConsumerState<ActivityDetailScreen> {
                 ],
               ),
             ),
-            if (trailing != null) trailing,
+            ?trailing,
           ],
         ),
       ),

@@ -153,6 +153,13 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     return created;
   }
 
+  // Editar una actividad (personalizada u oficial) y recargar la lista.
+  // El control de quién puede llamar esto (solo admin) vive en la UI.
+  Future<void> updateActivity(Activity updated) async {
+    await _service.updateActivity(updated);
+    await loadActivities();
+  }
+
   // Eliminar una actividad/tarea personalizada y recargar la lista
   Future<void> deleteActivity(String id) async {
     await _service.deleteActivity(id);
@@ -174,4 +181,3 @@ final activityProvider = StateNotifierProvider<ActivityNotifier, ActivityState>(
 
 // Provider para destacar una actividad en el mapa
 final selectedMapActivityProvider = StateProvider<Activity?>((ref) => null);
-
