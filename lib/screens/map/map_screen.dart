@@ -2,25 +2,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import '../../models/models.dart';
 import '../../providers/providers.dart';
-import '../../theme/theme.dart';
 
 // Modelo para puntos fijos del mapa (Servicios)
 class MapPOI {
   final String id;
   final String name;
   final String type; // Baños, Comida, Primeros Auxilios, Salidas de emergencia, Escenarios
-  final double mapX;
-  final double mapY;
+  final LatLng location;
 
   MapPOI({
     required this.id,
     required this.name,
     required this.type,
-    required this.mapX,
-    required this.mapY,
+    required this.location,
   });
 }
 
@@ -32,9 +31,56 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateMixin {
-  static const double mapSize = 900.0;
+  // ============================================================
+  // UBICACIÓN REAL DE LA MEGA VELARIA / FORO DE LAS ESTRELLAS
+  // Aguascalientes, Ags.
+  // ============================================================
 
-  final TransformationController _transformationController = TransformationController();
+  static const LatLng _venueCenter = LatLng(
+    21.87263720584285,
+    -102.30766387911993,
+  );
+
+  // Límites generales de trabajo del recinto.
+  // NO representan las esquinas exactas del techo.
+  // Se utilizan para conversión mapX/mapY y cámara.
+  static const LatLng _venueSouthWest = LatLng(
+    21.87130,
+    -102.31070,
+  );
+
+  static const LatLng _venueNorthEast = LatLng(
+    21.87325,
+    -102.30715,
+  );
+
+  // Polígono de trabajo de la zona completa.
+  // Sigue la forma general alargada de la Mega Velaria.
+  static final List<LatLng> _venueBoundary = [
+    LatLng(21.87318, -102.30805),
+    LatLng(21.87305, -102.30755),
+    LatLng(21.87288, -102.30725),
+    LatLng(21.87258, -102.30710),
+    LatLng(21.87225, -102.30720),
+    LatLng(21.87190, -102.30745),
+    LatLng(21.87160, -102.30775),
+    LatLng(21.87135, -102.30810),
+    LatLng(21.87125, -102.30855),
+    LatLng(21.87120, -102.30905),
+    LatLng(21.87128, -102.30955),
+    LatLng(21.87145, -102.31000),
+    LatLng(21.87170, -102.31040),
+    LatLng(21.87200, -102.31060),
+    LatLng(21.87230, -102.31055),
+    LatLng(21.87258, -102.31035),
+    LatLng(21.87280, -102.31005),
+    LatLng(21.87300, -102.30965),
+    LatLng(21.87315, -102.30915),
+    LatLng(21.87318, -102.30855),
+    LatLng(21.87318, -102.30805),
+  ];
+
+  final MapController _mapController = MapController();
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
 
@@ -47,35 +93,67 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
   bool _isDownloading = false;
   double _downloadProgress = 0.0;
 
-  // Ubicación del usuario simulada/real
+  // Ubicación del usuario real/simulada
   bool _gettingLocation = false;
-  double? _userMapX;
-  double? _userMapY;
-
-  // Tamaño real del viewport donde se dibuja el mapa (para centrar bien
-  // sin importar el tamaño de pantalla del dispositivo).
-  Size _viewportSize = const Size(360, 640);
+  LatLng? _userLocation;
 
   // Animación de "radar" para las actividades en vivo
   late final AnimationController _pulseController;
 
-  // Animación suave de cámara (zoom/paneo) en vez de saltos instantáneos
-  late final AnimationController _cameraController;
-  late final CurvedAnimation _cameraCurve;
-  Matrix4Tween? _cameraTween;
+  static const double _defaultZoom = 16.8;
+  static const double _minZoom = 15.0;
+  static const double _maxZoom = 19.0;
 
   // Lista de POIs del recinto
   final List<MapPOI> _pointsOfInterest = [
-    MapPOI(id: 'poi-b1', name: 'Sanitarios Zona Norte', type: 'Baños', mapX: 0.15, mapY: 0.15),
-    MapPOI(id: 'poi-b2', name: 'Sanitarios Zona Central', type: 'Baños', mapX: 0.90, mapY: 0.40),
-    MapPOI(id: 'poi-e1', name: 'Foro Principal (Escenario A)', type: 'Escenarios', mapX: 0.25, mapY: 0.35),
-    MapPOI(id: 'poi-e2', name: 'Teatro del Pueblo (Foro B)', type: 'Escenarios', mapX: 0.20, mapY: 0.60),
-    MapPOI(id: 'poi-e3', name: 'Pabellón Tecnológico', type: 'Escenarios', mapX: 0.75, mapY: 0.20),
-    MapPOI(id: 'poi-e4', name: 'Zona Cultural y Talleres', type: 'Escenarios', mapX: 0.40, mapY: 0.75),
-    MapPOI(id: 'poi-c1', name: 'Terraza Gourmet', type: 'Comida', mapX: 0.85, mapY: 0.65),
-    MapPOI(id: 'poi-pa1', name: 'Puesto de Auxilio 1', type: 'Primeros Auxilios', mapX: 0.50, mapY: 0.85),
-    MapPOI(id: 'poi-se1', name: 'Salida de Emergencia A', type: 'Salidas de emergencia', mapX: 0.10, mapY: 0.85),
-    MapPOI(id: 'poi-se2', name: 'Salida de Emergencia B', type: 'Salidas de emergencia', mapX: 0.90, mapY: 0.15),
+    MapPOI(
+      id: 'poi-b1',
+      name: 'Sanitarios Norte',
+      type: 'Baños',
+      location: LatLng(21.87285, -102.30810),
+    ),
+    MapPOI(
+      id: 'poi-b2',
+      name: 'Sanitarios Sur',
+      type: 'Baños',
+      location: LatLng(21.87155, -102.30940),
+    ),
+    MapPOI(
+      id: 'poi-e1',
+      name: 'Escenario Principal',
+      type: 'Escenarios',
+      location: LatLng(21.87260, -102.30780),
+    ),
+    MapPOI(
+      id: 'poi-e2',
+      name: 'Escenario Secundario',
+      type: 'Escenarios',
+      location: LatLng(21.87205, -102.30870),
+    ),
+    MapPOI(
+      id: 'poi-c1',
+      name: 'Puesto de Comida',
+      type: 'Comida',
+      location: LatLng(21.87235, -102.30820),
+    ),
+    MapPOI(
+      id: 'poi-pa1',
+      name: 'Primeros Auxilios',
+      type: 'Primeros Auxilios',
+      location: LatLng(21.87220, -102.30875),
+    ),
+    MapPOI(
+      id: 'poi-se1',
+      name: 'Salida Emergencia Norte',
+      type: 'Salidas de emergencia',
+      location: LatLng(21.87295, -102.30880),
+    ),
+    MapPOI(
+      id: 'poi-se2',
+      name: 'Salida Emergencia Sur',
+      type: 'Salidas de emergencia',
+      location: LatLng(21.87160, -102.30980),
+    ),
   ];
 
   @override
@@ -87,23 +165,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
       duration: const Duration(milliseconds: 1400),
     )..repeat();
 
-    _cameraController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 550),
-    );
-    _cameraCurve = CurvedAnimation(parent: _cameraController, curve: Curves.easeInOutCubic);
-    _cameraController.addListener(() {
-      if (_cameraTween != null) {
-        _transformationController.value = _cameraTween!.evaluate(_cameraCurve);
-      }
-    });
-
     _searchFocusNode.addListener(() => setState(() {}));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _transformationController.value = Matrix4.identity()
-        ..translate(-180.0, -180.0)
-        ..scale(1.25);
       _checkSelectedActivityFocus();
     });
   }
@@ -111,61 +175,40 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
   @override
   void dispose() {
     _pulseController.dispose();
-    _cameraController.dispose();
-    _transformationController.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
   }
 
-  // ---------------------------------------------------------------------
-  // Cámara: zoom y centrado animados (en vez de saltos instantáneos)
-  // ---------------------------------------------------------------------
-
-  void _animateToMatrix(Matrix4 target) {
-    _cameraTween = Matrix4Tween(begin: _transformationController.value, end: target);
-    _cameraController.forward(from: 0);
+  void _moveToLocation(LatLng location, {double zoom = _defaultZoom}) {
+    _mapController.move(location, zoom);
   }
 
-  // Centra suavemente la cámara sobre un punto de la escena (coordenadas
-  // 0.0–1.0 relativas al mapa) con un nivel de zoom dado.
-  void _animateCameraToScenePoint(double relX, double relY, {double scale = 1.7}) {
-    final targetX = relX * mapSize;
-    final targetY = relY * mapSize;
-    final viewportW = _viewportSize.width;
-    final viewportH = _viewportSize.height;
-    final transX = (viewportW / 2) - (targetX * scale);
-    final transY = (viewportH / 2) - (targetY * scale);
-    final target = Matrix4.identity()
-      ..translate(transX, transY)
-      ..scale(scale);
-    _animateToMatrix(target);
+  void _zoomIn() {
+    final currentZoom = _mapController.camera.zoom;
+    _moveToLocation(_mapController.camera.center, zoom: (currentZoom + 0.5).clamp(_minZoom, _maxZoom));
   }
 
-  // Zoom con botones +/-, manteniendo fijo el centro de la pantalla actual
-  void _zoomBy(double factor) {
-    final currentScale = _transformationController.value.getMaxScaleOnAxis();
-    final newScale = (currentScale * factor).clamp(0.5, 3.5);
-    final effectiveFactor = newScale / currentScale;
-    final centerX = _viewportSize.width / 2;
-    final centerY = _viewportSize.height / 2;
-    final zoomMatrix = Matrix4.identity()
-      ..translate(centerX, centerY)
-      ..scale(effectiveFactor)
-      ..translate(-centerX, -centerY);
-    final target = zoomMatrix.multiplied(_transformationController.value);
-    _animateToMatrix(target);
+  void _zoomOut() {
+    final currentZoom = _mapController.camera.zoom;
+    _moveToLocation(_mapController.camera.center, zoom: (currentZoom - 0.5).clamp(_minZoom, _maxZoom));
   }
 
   void _resetView() {
-    _animateToMatrix(
-      Matrix4.identity()
-        ..translate(-180.0, -180.0)
-        ..scale(1.25),
+    _moveToLocation(_venueCenter, zoom: _defaultZoom);
+  }
+
+  LatLng _latLngFromScene(double relX, double relY) {
+    final x = relX.clamp(0.0, 1.0);
+    final y = relY.clamp(0.0, 1.0);
+    final latRange = _venueNorthEast.latitude - _venueSouthWest.latitude;
+    final lngRange = _venueNorthEast.longitude - _venueSouthWest.longitude;
+    return LatLng(
+      _venueSouthWest.latitude + (y * latRange),
+      _venueSouthWest.longitude + (x * lngRange),
     );
   }
 
-  // Si venimos de la pantalla de detalle, enfocar la actividad preseleccionada
   void _checkSelectedActivityFocus() {
     final selectedAct = ref.read(selectedMapActivityProvider);
     if (selectedAct != null) {
@@ -173,7 +216,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
         _activeFilters.add('Escenarios');
         _searchController.text = selectedAct.title;
       });
-      _animateCameraToScenePoint(selectedAct.mapX, selectedAct.mapY, scale: 1.7);
+      final target = _latLngFromScene(selectedAct.mapX, selectedAct.mapY);
+      if (_isPointInsideVenue(target)) {
+        _moveToLocation(target, zoom: 18.0);
+      }
 
       Future.delayed(const Duration(milliseconds: 500), () {
         ref.read(selectedMapActivityProvider.notifier).state = null;
@@ -181,7 +227,26 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
     }
   }
 
-  // Obtener geolocalización real (o simular en mapa esquemático)
+  bool _isPointInsideVenue(LatLng location) {
+    final x = location.longitude;
+    final y = location.latitude;
+    final polygon = _venueBoundary;
+    var inside = false;
+
+    for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      final xi = polygon[i].longitude;
+      final yi = polygon[i].latitude;
+      final xj = polygon[j].longitude;
+      final yj = polygon[j].latitude;
+      final intersect = ((yi > y) != (yj > y)) &&
+          (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
   Future<void> _getUserLocation() async {
     setState(() => _gettingLocation = true);
 
@@ -203,13 +268,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
         throw 'Los permisos de ubicación están denegados permanentemente.';
       }
 
-      await Geolocator.getCurrentPosition();
+      final position = await Geolocator.getCurrentPosition();
       setState(() {
-        _userMapX = 0.52;
-        _userMapY = 0.48;
+        _userLocation = LatLng(position.latitude, position.longitude);
         _gettingLocation = false;
       });
-      _animateCameraToScenePoint(_userMapX!, _userMapY!, scale: 1.8);
+      _moveToLocation(_userLocation!, zoom: 18.0);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -219,10 +283,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
     } catch (e) {
       setState(() {
         _gettingLocation = false;
-        _userMapX = 0.52;
-        _userMapY = 0.48;
+        _userLocation = _venueCenter;
       });
-      _animateCameraToScenePoint(_userMapX!, _userMapY!, scale: 1.8);
+      _moveToLocation(_userLocation!, zoom: _defaultZoom);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -282,7 +345,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
           color: style.color,
           onTap: () {
             Navigator.pop(context);
-            _animateCameraToScenePoint(poi.mapX, poi.mapY, scale: 2.0);
+            _moveToLocation(poi.location, zoom: 18.0);
           },
         ),
       ],
@@ -317,7 +380,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
           color: color,
           onTap: () {
             Navigator.pop(context);
-            _animateCameraToScenePoint(act.mapX, act.mapY, scale: 2.0);
+            _moveToLocation(_latLngFromScene(act.mapX, act.mapY), zoom: 18.0);
           },
         ),
       ],
@@ -505,25 +568,31 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
     final query = _searchController.text.toLowerCase().trim();
 
     final filteredPOIs = _pointsOfInterest.where((poi) {
+      if (!_isPointInsideVenue(poi.location)) return false;
       if (!_activeFilters.contains(poi.type)) return false;
       if (query.isNotEmpty && !poi.name.toLowerCase().contains(query)) return false;
       return true;
     }).toList();
 
     final filteredLiveActPines = liveActivities.where((act) {
+      final point = _latLngFromScene(act.mapX, act.mapY);
+      if (!_isPointInsideVenue(point)) return false;
       if (!_activeFilters.contains('Escenarios')) return false;
       if (query.isNotEmpty && !act.title.toLowerCase().contains(query)) return false;
       return true;
     }).toList();
 
     final filteredUpcomingActPines = upcomingTodayActivities.where((act) {
+      final point = _latLngFromScene(act.mapX, act.mapY);
+      if (!_isPointInsideVenue(point)) return false;
       if (!_activeFilters.contains('Escenarios')) return false;
       if (query.isNotEmpty && !act.title.toLowerCase().contains(query)) return false;
       return true;
     }).toList();
 
     final filteredFavoriteActPines = favoriteActivities.where((act) {
-      if (!_activeFilters.contains('Escenarios')) return false;
+      final point = _latLngFromScene(act.mapX, act.mapY);
+      if (!_isPointInsideVenue(point)) return false;
       if (query.isNotEmpty && !act.title.toLowerCase().contains(query)) return false;
       return true;
     }).toList();
@@ -640,77 +709,94 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
               ),
               const SizedBox(height: 8),
 
-              // Canvas del Mapa
               Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    _viewportSize = constraints.biggest;
-                    return ClipRect(
-                      child: InteractiveViewer(
-                        transformationController: _transformationController,
-                        minScale: 0.5,
-                        maxScale: 3.5,
-                        boundaryMargin: const EdgeInsets.all(300),
-                        child: Stack(
-                          children: [
-                            CustomPaint(
-                              size: const Size(mapSize, mapSize),
-                              painter: FairMapPainter(
-                                isDark: theme.brightness == Brightness.dark,
-                                primaryColor: theme.colorScheme.primary,
-                                secondaryColor: AppTheme.secondaryColor,
-                              ),
-                            ),
-
-                            ...filteredPOIs.map((poi) {
-                              final style = _styleForType(poi.type, theme);
-                              return Positioned(
-                                left: poi.mapX * mapSize - 16,
-                                top: poi.mapY * mapSize - 32,
-                                child: _popIn(_mapMarker(
-                                  title: poi.name,
-                                  icon: style.icon,
-                                  color: style.color,
-                                  onTap: () => _showPoiSheet(poi),
-                                )),
-                              );
-                            }),
-
-                            ...filteredUpcomingActPines.map((act) {
-                              return Positioned(
-                                left: act.mapX * mapSize - 16,
-                                top: act.mapY * mapSize - 34,
-                                child: _popIn(_upcomingActivityMarker(act: act, theme: theme)),
-                              );
-                            }),
-
-                            ...filteredFavoriteActPines.map((act) {
-                              return Positioned(
-                                left: act.mapX * mapSize - 18,
-                                top: act.mapY * mapSize - 38,
-                                child: _popIn(_favoriteActivityMarker(act: act, theme: theme)),
-                              );
-                            }),
-
-                            ...filteredLiveActPines.map((act) {
-                              return Positioned(
-                                left: act.mapX * mapSize - 20,
-                                top: act.mapY * mapSize - 40,
-                                child: _popIn(_liveActivityMarker(act: act)),
-                              );
-                            }),
-
-                            if (_userMapX != null && _userMapY != null)
-                              Positioned(
-                                left: _userMapX! * mapSize - 12,
-                                top: _userMapY! * mapSize - 12,
-                                child: _userLocationPin(),
-                              ),
-                          ],
-                        ),
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _venueCenter,
+                    initialZoom: _defaultZoom,
+                    minZoom: _minZoom,
+                    maxZoom: _maxZoom,
+                    cameraConstraint: CameraConstraint.containCenter(
+                      bounds: LatLngBounds(
+                        _venueSouthWest,
+                        _venueNorthEast,
                       ),
-                    );
-                  },
+                    ),
+                    onTap: (_, __) => _searchFocusNode.unfocus(),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                      subdomains: const ['a', 'b', 'c', 'd'],
+                      userAgentPackageName: 'com.mi_feria_inteligente',
+                    ),
+                    PolygonLayer(
+                      polygons: [
+                        Polygon(
+                          points: List.of(_venueBoundary),
+                          color: Colors.blueAccent.withOpacity(0.12),
+                          borderColor: Colors.blueAccent.withOpacity(0.75),
+                          borderStrokeWidth: 3,
+                          label: 'Mega Velaria',
+                          labelStyle: TextStyle(
+                            color: Colors.blueAccent.shade700,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        ...filteredPOIs.map((poi) {
+                          final style = _styleForType(poi.type, theme);
+                          return Marker(
+                            width: 48,
+                            height: 56,
+                            point: poi.location,
+                            child: _popIn(_mapMarker(
+                              title: poi.name,
+                              icon: style.icon,
+                              color: style.color,
+                              onTap: () => _showPoiSheet(poi),
+                            )),
+                          );
+                        }),
+                        ...filteredUpcomingActPines.map((act) {
+                          return Marker(
+                            width: 48,
+                            height: 56,
+                            point: _latLngFromScene(act.mapX, act.mapY),
+                            child: _popIn(_upcomingActivityMarker(act: act, theme: theme)),
+                          );
+                        }),
+                        ...filteredFavoriteActPines.map((act) {
+                          return Marker(
+                            width: 56,
+                            height: 66,
+                            point: _latLngFromScene(act.mapX, act.mapY),
+                            child: _popIn(_favoriteActivityMarker(act: act, theme: theme)),
+                          );
+                        }),
+                        ...filteredLiveActPines.map((act) {
+                          return Marker(
+                            width: 60,
+                            height: 70,
+                            point: _latLngFromScene(act.mapX, act.mapY),
+                            child: _popIn(_liveActivityMarker(act: act)),
+                          );
+                        }),
+                        if (_userLocation != null)
+                          Marker(
+                            width: 42,
+                            height: 42,
+                            point: _userLocation!,
+                            child: _userLocationPin(),
+                          ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -743,7 +829,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
                           subtitle: Text(item.type),
                           onTap: () {
                             _searchFocusNode.unfocus();
-                            _animateCameraToScenePoint(item.mapX, item.mapY, scale: 2.0);
+                            _moveToLocation(item.location, zoom: 18.0);
                           },
                         );
                       } else if (item is Activity) {
@@ -758,7 +844,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
                           subtitle: Text(isLive ? 'En vivo ahora' : item.category),
                           onTap: () {
                             _searchFocusNode.unfocus();
-                            _animateCameraToScenePoint(item.mapX, item.mapY, scale: 2.0);
+                            _moveToLocation(_latLngFromScene(item.mapX, item.mapY), zoom: 18.0);
                           },
                         );
                       }
@@ -775,9 +861,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with TickerProviderStateM
             bottom: _isDownloading ? 96 : 24,
             child: Column(
               children: [
-                _mapControlButton(icon: Icons.add, onTap: () => _zoomBy(1.3)),
+                _mapControlButton(icon: Icons.add, onTap: _zoomIn),
                 const SizedBox(height: 8),
-                _mapControlButton(icon: Icons.remove, onTap: () => _zoomBy(1 / 1.3)),
+                _mapControlButton(icon: Icons.remove, onTap: _zoomOut),
                 const SizedBox(height: 8),
                 _mapControlButton(icon: Icons.center_focus_weak, onTap: _resetView),
               ],
@@ -1158,12 +1244,18 @@ class FairMapPainter extends CustomPainter {
       ..lineTo(740, 80)
       ..lineTo(740, 740)
       ..lineTo(80, 740)
-      ..close()
+      ..close();
+    canvas.drawPath(path, streetPaint);
+
+    final streetDivider = Path()
       ..moveTo(80, 420)
-      ..lineTo(740, 420)
+      ..lineTo(740, 420);
+    canvas.drawPath(streetDivider, streetPaint);
+
+    final crossStreet = Path()
       ..moveTo(410, 80)
       ..lineTo(410, 740);
-    canvas.drawPath(path, streetPaint);
+    canvas.drawPath(crossStreet, streetPaint);
 
     final diagonalPath = Path()
       ..moveTo(120, 120)
