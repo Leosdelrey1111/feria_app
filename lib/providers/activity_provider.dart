@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/activity.dart';
 import '../services/activity_service.dart';
 import '../services/watch_sync_service.dart';
@@ -9,7 +9,7 @@ class ActivityState {
   final List<String> favoriteIds;
   final bool isLoading;
   final String? selectedCategory; // null = Todos
-  final int selectedDayIndex; // 0 = Día 1, 1 = Día 2, 2 = Día 3
+  final int selectedDayIndex; // 0 = DÃ­a 1, 1 = DÃ­a 2, 2 = DÃ­a 3
 
   ActivityState({
     this.activities = const [],
@@ -48,13 +48,13 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
   // Sincronizar favoritos con el reloj
   void syncFavoritesToWatch() {
     final favList = state.activities.where((act) => state.favoriteIds.contains(act.id)).map((act) {
-      String icon = '📅';
+      String icon = 'ðŸ“…';
       switch (act.category) {
-        case 'Música': icon = '🎵'; break;
-        case 'Concursos': icon = '🏆'; break;
-        case 'Arte': icon = '🎭'; break;
-        case 'Gastronomía': icon = '🍲'; break;
-        case 'Infantil': icon = '🎈'; break;
+        case 'MÃºsica': icon = 'ðŸŽµ'; break;
+        case 'Concursos': icon = 'ðŸ†'; break;
+        case 'Arte': icon = 'ðŸŽ­'; break;
+        case 'GastronomÃ­a': icon = 'ðŸ²'; break;
+        case 'Infantil': icon = 'ðŸŽˆ'; break;
       }
       
       final now = DateTime.now();
@@ -79,7 +79,9 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
         'duration': '${act.durationInMinutes} min',
         'status': statusStr,
         'icon': icon,
-      };
+          'mapX': act.mapX,
+          'mapY': act.mapY,
+        };
     }).toList();
 
     _watchSyncService.sendMessage({
@@ -105,7 +107,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     }
   }
 
-  // Filtrar por categoría
+  // Filtrar por categorÃ­a
   void setCategoryFilter(String? category) {
     if (category == null) {
       state = state.copyWith(clearCategory: true);
@@ -114,7 +116,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
     }
   }
 
-  // Cambiar día seleccionado
+  // Cambiar dÃ­a seleccionado
   void setDayIndex(int index) {
     state = state.copyWith(selectedDayIndex: index);
   }
@@ -154,7 +156,7 @@ class ActivityNotifier extends StateNotifier<ActivityState> {
   }
 
   // Editar una actividad (personalizada u oficial) y recargar la lista.
-  // El control de quién puede llamar esto (solo admin) vive en la UI.
+  // El control de quiÃ©n puede llamar esto (solo admin) vive en la UI.
   Future<void> updateActivity(Activity updated) async {
     await _service.updateActivity(updated);
     await loadActivities();
@@ -181,3 +183,5 @@ final activityProvider = StateNotifierProvider<ActivityNotifier, ActivityState>(
 
 // Provider para destacar una actividad en el mapa
 final selectedMapActivityProvider = StateProvider<Activity?>((ref) => null);
+
+
