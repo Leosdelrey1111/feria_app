@@ -33,8 +33,8 @@ class Ticket {
     return Ticket(
       id: json['id'],
       type: json['type'],
-      quantity: json['quantity'],
-      totalPrice: json['totalPrice'],
+      quantity: (json['quantity'] as num).toInt(),
+      totalPrice: (json['totalPrice'] as num).toDouble(),
       visitDate: DateTime.parse(json['visitDate']),
       qrCodeData: json['qrCodeData'],
       status: json['status'],
