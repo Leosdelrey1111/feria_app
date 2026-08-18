@@ -31,10 +31,13 @@ class _MyAppState extends ConsumerState<MyApp> {
     super.initState();
     // Registrar el listener de comunicación del smartwatch después del renderizado inicial
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Forzar inicialización de pollProvider para iniciar la transmisión y stream periódico
+      ref.read(pollProvider);
+
       final syncService = ref.read(watchSyncServiceProvider);
       syncService.onMessageReceived = (msg) {
         final type = msg['type'];
-        debugPrint('MyApp: Comando recibido desde el reloj: $type');
+        debugPrint('MyApp: Comando recibido desde el reloj/TV: $type');
         if (type == 'open_map') {
           // Navegar al tab del Mapa (tab index 1 en HubScreen)
           ref.read(routerProvider).go('/?tab=1');
@@ -45,7 +48,7 @@ class _MyAppState extends ConsumerState<MyApp> {
           // Navegar al tab de Perfil (tab index 3) donde se ve el estado de sincronización
           ref.read(routerProvider).go('/?tab=3');
         } else if (type == 'request_sync') {
-          // El reloj solicita una sincronización forzada de todos los datos
+          // El reloj o la TV solicita una sincronización forzada de todos los datos
           final authNotifier = ref.read(authProvider.notifier);
           if (!authNotifier.state.wearConnected && authNotifier.state.isLoggedIn) {
             authNotifier.syncSmartwatch();
@@ -54,6 +57,8 @@ class _MyAppState extends ConsumerState<MyApp> {
             ref.read(ticketProvider.notifier).syncTicketsToWatch();
             ref.read(activityProvider.notifier).syncFavoritesToWatch();
           }
+          // También sincronizar las encuestas/votos
+          ref.read(pollProvider.notifier).broadcastPolls(ref.read(pollProvider));
         }
       };
     });
